@@ -118,14 +118,14 @@ $("rnd").onclick=()=>{$("rc").value=pick(["CHAI","SAMOSA","GHODA","RANI","JALEBI
 async function startCamera() {
   if (myStream) return true;
   try {
-    myStream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 }, audio: true });
+    myStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
     $("myVid").srcObject = myStream;
     $("myVid").play().catch(e=>console.log(e));
     return true;
   } catch(e) {
     console.log("Camera Error: ", e);
-    $("err").textContent = "Camera/Mic permission allow karein video call ke liye!";
-    return false;
+    // Camera fail hone par bhi game band na ho, bina camera ke chale
+    return true; 
   }
 }
 
@@ -151,29 +151,37 @@ function callPeer(targetPeerId) {
 $("go").onclick=async ()=>{
   const n=$("nm").value.trim().slice(0,14), c=$("rc").value.trim().toUpperCase().replace(/[^A-Z0-9]/g,"");
   if(!n||!c){$("err").textContent="Naam aur room code dono daalo!";return}
-  $("err").textContent="Connecting...";
+  $("err").textContent="Connecting to room...";
   myName=n; room=c;
   try{localStorage.setItem("cn",n);localStorage.setItem("cr",c)}catch(e){}
 
-  const hasCam = await startCamera();
-  if(!hasCam) return;
+  await startCamera();
 
   const hostPeerId = "chesstamasha-" + room;
   const peerConfig = {
     config: {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' }
       ]
     }
   };
 
   peer = new Peer(peerConfig);
 
+  peer.on('error', (err) => {
+    console.log("Peer error:", err);
+    if(err.type === 'unavailable-id') {
+      // Already host, ignore
+    }
+  });
+
   peer.on('open', (id) => {
     peer.on('call', handleIncomingCall);
 
-    const testConn = peer.connect(hostPeerId);
+    // Pehle Client ban kar connect karne ki koshish karo
+    let testConn = peer.connect(hostPeerId, { reliable: true });
     let connected = false;
 
     testConn.on('open', () => {
@@ -186,6 +194,11 @@ $("go").onclick=async ()=>{
       showGame();
     });
 
+    testConn.on('error', (e) => {
+      console.log("Connection err:", e);
+    });
+
+    // Agar 2 second me connection nahi bana, matlab room pehle se nahi hai -> Host ban jao
     setTimeout(() => {
       if (!connected) {
         testConn.close();
@@ -204,7 +217,7 @@ $("go").onclick=async ()=>{
           setupConn();
         });
       }
-    }, 1500);
+    }, 2000);
   });
 };
 
@@ -212,7 +225,7 @@ function setupConn() {
   conn.on('data', (data) => {
     if(data.type === 'JOIN') {
       oppName = data.name;
-      conn.send({type: 'INIT', name: myName, board: JSON.stringify(b), st, hostPeerId: peer.id});
+      conn.send({type: 'INIT', name: MyNameSafe(), board: JSON.stringify(b), st, hostPeerId: peer.id});
       updatePlayerInfo();
       $("msg").textContent = `${oppName} aa gaya! Ab asli maza shuru 🔥`;
       if(data.myPeerId) callPeer(data.myPeerId);
@@ -242,6 +255,8 @@ function setupConn() {
     }
   });
 }
+
+function MyNameSafe() { return myName; }
 
 function showGame() {
   $("err").textContent = "";
@@ -287,7 +302,7 @@ $("bd").onclick=e=>{
       over=chk?"mate":"draw";
       msg=chk?`CHECKMATE! 🏆🎉 ${nm} jeet gaya!`:"Draw! 🤝 Game samaapt.";
     } else if(chk){
-      msg+=" ⚠️ CHECK! Raja ghabra gaya isConnected 😱";
+      msg+=" ⚠️ CHECK! Raja ghabra gaya 😱";
     }
     b = nb;
     st = {turn: nx, last: i, over, msg};
