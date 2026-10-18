@@ -115,16 +115,16 @@ function boot(){
 
 $("rnd").onclick=()=>{$("rc").value=pick(["CHAI","SAMOSA","GHODA","RANI","JALEBI","PYAADA"])+Math.floor(Math.random()*90+10)};
 
-// Camera Initialization
 async function startCamera() {
   if (myStream) return true;
   try {
-    myStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    myStream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 }, audio: true });
     $("myVid").srcObject = myStream;
+    $("myVid").play().catch(e=>console.log(e));
     return true;
   } catch(e) {
     console.log("Camera Error: ", e);
-    $("err").textContent = "Camera/Mic access zaroori hai video call ke liye!";
+    $("err").textContent = "Camera/Mic permission allow karein video call ke liye!";
     return false;
   }
 }
@@ -151,7 +151,7 @@ function callPeer(targetPeerId) {
 $("go").onclick=async ()=>{
   const n=$("nm").value.trim().slice(0,14), c=$("rc").value.trim().toUpperCase().replace(/[^A-Z0-9]/g,"");
   if(!n||!c){$("err").textContent="Naam aur room code dono daalo!";return}
-  $("err").textContent="Connecting Camera & Peer...";
+  $("err").textContent="Connecting...";
   myName=n; room=c;
   try{localStorage.setItem("cn",n);localStorage.setItem("cr",c)}catch(e){}
 
@@ -159,13 +159,11 @@ $("go").onclick=async ()=>{
   if(!hasCam) return;
 
   const hostPeerId = "chesstamasha-" + room;
-
   const peerConfig = {
     config: {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' }
+        { urls: 'stun:stun1.l.google.com:19302' }
       ]
     }
   };
@@ -184,7 +182,6 @@ $("go").onclick=async ()=>{
       color = "b";
       setupConn();
       conn.send({type:'JOIN', name: myName, myPeerId: id});
-      
       callPeer(hostPeerId);
       showGame();
     });
@@ -218,19 +215,14 @@ function setupConn() {
       conn.send({type: 'INIT', name: myName, board: JSON.stringify(b), st, hostPeerId: peer.id});
       updatePlayerInfo();
       $("msg").textContent = `${oppName} aa gaya! Ab asli maza shuru 🔥`;
-      
-      if(data.myPeerId) {
-        callPeer(data.myPeerId);
-      }
+      if(data.myPeerId) callPeer(data.myPeerId);
     } else if(data.type === 'INIT') {
       oppName = data.name;
       b = JSON.parse(data.board);
       st = data.st;
       updatePlayerInfo();
       render();
-      if(data.hostPeerId) {
-        callPeer(data.hostPeerId);
-      }
+      if(data.hostPeerId) callPeer(data.hostPeerId);
     } else if(data.type === 'MOVE') {
       b = JSON.parse(data.board);
       st = data.st;
@@ -295,7 +287,7 @@ $("bd").onclick=e=>{
       over=chk?"mate":"draw";
       msg=chk?`CHECKMATE! 🏆🎉 ${nm} jeet gaya!`:"Draw! 🤝 Game samaapt.";
     } else if(chk){
-      msg+=" ⚠️ CHECK! Raja ghabra gaya 😱";
+      msg+=" ⚠️ CHECK! Raja ghabra gaya isConnected 😱";
     }
     b = nb;
     st = {turn: nx, last: i, over, msg};
